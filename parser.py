@@ -54,11 +54,12 @@ class Lexer:
 
 
 class Node:
-    def __init__(self, kind, value=None, left=None, right=None):
+    def __init__(self, kind, value=None, left=None, right=None, parent=None):
         self.kind = kind
         self.value = value
         self.left = left
         self.right = right
+        self.parent = parent
 
     def print_tree(self):
         if self.left:
@@ -145,6 +146,25 @@ def _build_tree_string(root, curr_index, index=False, delimiter='-'):
 
     # Return the new box, its width and its root repr positions
     return new_box, len(new_box[0]), new_root_start, new_root_end
+
+
+def set_parent(root, par=None):
+    if root:
+        root.parent = par
+        set_parent(root.left, root)
+        set_parent(root.right, root)
+
+
+def in_order(node):
+    if node is None:
+        return
+    if node.kind == 1:
+        if node.parent.right.kind == 1 and node.parent.left.kind == 1:
+            path.append(node.parent)
+            new_node = Node(Parser.CONST, perform(node.parent), parent=node.parent.parent)
+            node.parent.parent.right = new_node
+    in_order(node.right)
+    in_order(node.left)
 
 
 class Parser:
@@ -269,9 +289,27 @@ def print_tree(root):
         print(output)
 
 
+def perform(node):
+    if node.kind == Parser.ADD:
+        return node.left.value + node.right.value
+    elif node.kind == Parser.SUB:
+        return node.left.value - node.right.value
+    elif node.kind == Parser.MULTIPLY:
+        return node.left.value * node.right.value
+    elif node.kind == Parser.DIVIDE:
+        return node.left.value / node.right.value
+
+
+path = []
 lex = Lexer()
 p = Parser(lex)
 ast = p.parse()
 # print_tree(ast)
 print(ast)
+set_parent(ast)
+in_order(ast)
+print(*path, sep=' ')
+print(ast)
+
+
 
