@@ -158,13 +158,13 @@ def set_parent(root, par=None):
 def in_order(node):
     if node is None:
         return
+    in_order(node.left)
+    in_order(node.right)
     if node.kind == 1:
         if node.parent.right.kind == 1 and node.parent.left.kind == 1:
             path.append(node.parent)
             new_node = Node(Parser.CONST, perform(node.parent), parent=node.parent.parent)
             node.parent.parent.right = new_node
-    in_order(node.right)
-    in_order(node.left)
 
 
 class Parser:
@@ -312,4 +312,4 @@ print(*path, sep=' ')
 print(ast)
 
 
-
+# 3 + 4 * (2 + 1) - 2 + 6 * 4
