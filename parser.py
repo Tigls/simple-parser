@@ -1,24 +1,18 @@
 import sys
-from collections import deque
-
 
 class Lexer:
-    # def __init__(self, string):
-    # 	self.string = string
 
     NUM, ID, LPAR, RPAR, PLUS, MINUS, EQUAL, DIVIDE, MULT, SEMICOLON, EOF = range(11)
 
     SYMBOLS = {'=': EQUAL, ';': SEMICOLON, '(': LPAR, ')': RPAR, '+': PLUS, '-': MINUS, '/': DIVIDE, '*': MULT}
 
-    # текущий символ, считанный из исходника
-    ch = ' '  # допустим, первый символ - это пробел
+    ch = ' '
 
     def error(self, msg):
         print('Lexer error: ', msg)
         sys.exit(1)
 
     def getc(self):
-        # self.ch = self.string[0]
         self.ch = sys.stdin.read(1)
 
     def next_tok(self):
@@ -54,12 +48,15 @@ class Lexer:
 
 
 class Node:
-    def __init__(self, kind, value=None, left=None, right=None, parent=None):
+    def __init__(self, kind=None, value=None, left=None, right=None, parent=None, op_tick=None, counted=None, level=None):
         self.kind = kind
         self.value = value
         self.left = left
         self.right = right
         self.parent = parent
+        self.op_tick = op_tick
+        self.counted = counted
+        self.level = level
 
     def print_tree(self):
         if self.left:
@@ -74,7 +71,6 @@ class Node:
 
 
 def _build_tree_string(root, curr_index, index=False, delimiter='-'):
-
     if root is None:
         return [], 0, 0, 0
     dict_lex = {
@@ -155,16 +151,86 @@ def set_parent(root, par=None):
         set_parent(root.right, root)
 
 
-def in_order(node):
+def minimize_tree(node):
     if node is None:
         return
-    if node.kind == 1:
-        if node.parent.right.kind == 1 and node.parent.left.kind == 1:
-            path.append(node.parent)
-            new_node = Node(Parser.CONST, perform(node.parent), parent=node.parent.parent)
-            node.parent.parent.right = new_node
-    in_order(node.right)
-    in_order(node.left)
+    flag = True
+    while flag:
+        flag = False
+        h_left = count_height(node.left)
+        h_right = count_height(node.right)
+        new_type = 0
+        if (h_left >= 1 or h_right >= 1) and abs(h_left - h_right) > 1 and h_left > h_right:
+            if node.left.kind == node.kind:
+                if node.left.kind == Parser.ADD or node.left.kind == Parser.MULTIPLY:
+                    new_type = node.left.kind
+                elif node.left.kind == Parser.SUB:
+                    new_type = Parser.ADD
+                elif node.left.kind == Parser.DIVIDE:
+                    new_type = Parser.MULTIPLY
+            if new_type != 0:
+                pivot = node.left
+                l_type = node.left.kind
+                node.left = pivot.right
+                node.kind = new_type
+                pivot.right = node
+
+                node = pivot
+                flag = True
+            else:
+                node.left = minimize_tree(node.left)
+                node.right = minimize_tree(node.right)
+    node.left = minimize_tree(node.left)
+    node.right = minimize_tree(node.right)
+    return node
+
+
+def count_height(node):
+    result = 0
+    if node is None:
+        return result
+    result = 1 + max(count_height(node.left), count_height(node.right))
+    return result
+
+
+def find_gcd(a, b):
+    while a != 0 and b != 0:
+        if a > b:
+            a = a % b
+        else:
+            b = b % a
+    return a + b
+
+
+def same_tree(node):
+    if node is None:
+        return
+    if node.kind == Parser.ADD or node.kind == Parser.SUB:
+        if node.left.kind == Parser.CONST and node.right.kind == Parser.CONST:
+            left = node.left
+            right = node.right
+            gcd = find_gcd(node.left.value, node.right.value)
+            if gcd != 1:
+                node.left.left = Node(Parser.CONST, value=left.value // gcd)
+                node.left.right = Node(Parser.CONST, value=right.value // gcd)
+                node.right.kind = Parser.CONST
+                node.right.value = gcd
+                node.left.kind = node.kind
+                node.left.value = None
+                node.kind = Parser.MULTIPLY
+    node.left = same_tree(node.left)
+    node.right = same_tree(node.right)
+    return node
+
+
+def copy(node):
+    left = None
+    right = None
+    if node.left is not None:
+        left = copy(node.left)
+    if node.right is not None:
+        right = copy(node.right)
+    return Node(node.kind, value=node.value, left=left, right=right)
 
 
 class Parser:
@@ -259,36 +325,6 @@ class Parser:
         return node
 
 
-def print_tree(root):
-    buf = deque()
-    output = []
-    if not root:
-        print('$')
-    else:
-        buf.append(root)
-        count, next_count = 1, 0
-        while count:
-            node = buf.popleft()
-            if node:
-                output.append(node.kind)
-                count -= 1
-                for n in (node.left, node.right):
-                    if n:
-                        buf.append(n)
-                        next_count += 1
-                    else:
-                        buf.append(None)
-            else:
-                output.append('$')
-            if not count:
-                print(output)
-                output = []
-                count, next_count = next_count, 0
-        # print the remaining all empty leaf node part
-        output.extend(['$'] * len(buf))
-        print(output)
-
-
 def perform(node):
     if node.kind == Parser.ADD:
         return node.left.value + node.right.value
@@ -300,16 +336,23 @@ def perform(node):
         return node.left.value / node.right.value
 
 
-path = []
 lex = Lexer()
 p = Parser(lex)
 ast = p.parse()
-# print_tree(ast)
-print(ast)
-set_parent(ast)
-in_order(ast)
-print(*path, sep=' ')
-print(ast)
+ast2 = copy(ast)
+
+print('Parsed tree: ', ast)
+
+min_tree = minimize_tree(ast)
+print('Minimized tree: ', min_tree)
+
+similar = same_tree(ast2)
+print('Similar tree: ', similar)
+
+similar_parallel = same_tree(min_tree)
+print('Similar parallel tree', similar_parallel)
 
 
-
+# 3 + 4 * (2 + 1) - 2 + 6 * 4
+# (8-2-3-1)*(4-5)/(7-8)/9/10
+# 1 + 2 * (4 - 4) + 6 * (1 + 9) + 2 * (12 + 8 + 9 + 6) / 4 * 9 - 4 + 5 / 9 * 2 * (1 + 2 / 5);
